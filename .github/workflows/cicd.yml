@@ -1,0 +1,61 @@
+
+
+
+name: CI-CD Pipeline
+
+# Runs on push, on a schedule (automated retraining), or manually
+on:
+  push:
+    branches: [ main, master ]
+  schedule:
+    - cron: "0 3 * * 1"      # automated retraining: every Monday 3am UTC
+  workflow_dispatch:
+
+jobs:
+  pipeline:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      # --- get code ---
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # --- python ---
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      # --- TRAINING ---
+      
+
+      - name: Train model
+        run: python src/train.py
+
+      # --- MONITORING ---
+      - name: Monitor
+        run: python monitor.py
+
+      # --- DEPLOYMENT ---
+      - name: Build Docker image
+        run: docker build -t taxi-api .
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Push image
+        run: |
+          IMAGE=ghcr.io/${{ github.repository }}
+          IMAGE=$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')
+          docker tag taxi-api $IMAGE:latest
+          docker push $IMAGE:latest
